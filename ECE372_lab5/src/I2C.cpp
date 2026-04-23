@@ -1,6 +1,7 @@
 // Initialization for I2C and a function sendatai2c that sends data using I2C
 #include <avr/io.h>
 #include "I2C.h"
+#include "Arduino.h"
 
 unsigned char I2C_Adress = 0x68;
 
@@ -16,7 +17,7 @@ PRR0 &= ~(1 << PRTWI);  //On pg. 236 of ATmega2560 Datasheet
   // Table 24-7 Prescaler value is 1 so TWPS0 = 0 and TWPS1 = 0.
   TWSR &= ~(1 << TWPS0);
   TWSR &= ~(1 << TWPS1);
-  TWBR = 0x72; // bit rate generator = 100k  (TWBR = 74)
+  TWBR = 0x12; // bit rate generator = 100k  (TWBR = 74)
 
   TWCR = (1 << TWINT | 1 << TWEN); // enable two wire interface
  
@@ -77,8 +78,9 @@ void read_From(unsigned char SLA, unsigned char MEMADDRESS){
 
   //Recieve byte into TWDR
   TWCR = (1<<TWINT) | (1<<TWEN);
-  while(!TWCR & (1<<TWINT));
-
+Serial.println("found the bastard");
+  // while(!(TWCR & (1<<TWINT)));
+Serial.println(" bro its choped");
   // stops transaction
   stopI2C_Trans();
 }

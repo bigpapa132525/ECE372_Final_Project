@@ -15,12 +15,9 @@
 
 
 #include <avr/io.h>
-#include "led.h"
 #include "switch.h"
 #include "timer.h"
-#include "lcd.h"
 #include "pwm.h"
-#include "adc.h"
 #include <avr/interrupt.h>
 #include <avr/io.h>
 #include "Arduino.h"
