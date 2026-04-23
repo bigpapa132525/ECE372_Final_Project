@@ -18,17 +18,13 @@
 #include "switch.h"
 #include "timer.h"
 #include "pwm.h"
+#include "spi.h"
+#include "I2C.h"
+#include "math.h"
 #include <avr/interrupt.h>
-#include <avr/io.h>
 #include "Arduino.h"
 
 // defines
-
-
-/*
- * Define a set of states that can be used in the state machine using an enum.
- */
-// typedef enum .......
 
 
 // Initialize states.  Remember to use volatile 
@@ -36,75 +32,126 @@
 /*
  * Define a set of states that can be used in the state machine using an enum.
  */
-
+/* ------------------------- Definded things --------------------*/
+// angle stuff
+int16_t ax, ay, az;
+//states stuff
+bool alarmTriggered = false;
+bool alarmSilenced = false;
 
 volatile int counter=0;
 volatile int time_base=10;
 
-// Sequence that the led's are going through
-int number = 1;
-
-// Boolian value wheather faster mode is on or not
-int fast = 0;
-
-// see if button is pressed
-volatile int bttnPress = 0;
-
 int wait = 0;
+//Smile States
+typedef enum SMILE
+{
+  SMILEY,
+  FROWN,
+} statetype;
 
+
+//Button States
 typedef enum stateType_enum {
 wait_press, debounce_press,
 wait_release, debounce_release
 } stateType;
 
-volatile stateType state = wait_press;
+volatile statetype displaystate = SMILEY;
+volatile stateType buttonstate = wait_press;
 
 
 int main(){
 
 // ---- initiallizing ---- //
-  initTimer1();
-  initTimer0();
-  initPWMTimer3();
-  switch_init();
-  initADC();
-  initSevSeg();
-  initMotorDirectionPins();
-  sei(); // Enable global interrupts.
+/* -------- testing -----------*/
+init();
+Serial.begin(9600);
+  // initialize your timer functions (needed for delays)
+    initTimer0();
+    initTimer1();
+    initTimer3();
+ 
+    // initialize buzzer PWM
+    initPWMTimer3();
+    buzzerOff();
+ 
+    // initialize SPI for MAX7219
+    initSPI();
+    // Small delay to let MAX7219 stabilize
+    delayMs(10);
+    
+    //init i2c
+    initI2C();
 
-  /* -------- testing -----------*/
-  // Serial.begin(9600);
+    //init button
+    switch_init();
 
-  /* ------------ NEW VARIALBES FOR THIS LAB4 HERE ------------*/
-    int go = 0;
-    unsigned int adcValue;
+    sei(); // Enable global interrupts.
+    
 
 // while loop
   while(1){
-    /* --------------- Check State: Button press ---------------- */
-    if(go == 1){
-    go = 0;
-    cli();
-    stopMotor();
-    for(int i = 9; i >= 0; i--){
-      numOut(i);
-      delayMs(1000);
+  /* --------------------------- obtain xyz coord roll -------------------*/
+        ReadIMU(&ax, &ay, &az);
+
+    // Now we calculate tilt
+    float ax_g = ax / 16384.0;
+    float ay_g = ay / 16384.0;
+    float az_g = az / 16384.0;
+
+    float pitch = atan2(ax_g, sqrt(ay_g * ay_g + az_g * az_g)) * (180.0 / 3.14159);
+    float roll  = atan2(ay_g, sqrt(ax_g * ax_g + az_g * az_g)) * (180.0 / 3.14159);
+
+    bool isTilted = (fabs(pitch) >= 45.0) || (fabs(roll) >= 45.0);
+
+    Serial.print(ax);
+    Serial.print(" ");
+    Serial.print(ay);
+    Serial.print(" ");
+    Serial.print(az);
+    Serial.print(" ");
+
+    if (isTilted){
+      Serial.println("Tilting");
+      displaystate = FROWN; 
     }
-    sei();
-  }
-    numOut(10);
-    adcValue = ADC;
-/* --------------------------- Motor Control ------------------------------ */    
-    changeDutyCycle(adcValue);
-/* ------------------------------------- State Machine ---------------------------------- */   
-    switch(state){
+
+    else{
+      Serial.println("Stable");
+      displaystate = SMILEY;
+    }
+
+  
+  /* ------------------------------------- State Machine Smile ------------------------------------*/
+    switch (displaystate) {
+      case SMILEY:
+        displaySmileyFace();
+        alarmTriggered = false;
+        alarmSilenced = false;
+        buzzerOff();
+        break;
+
+      case FROWN:
+        displayFrownyFace();
+        alarmTriggered = true;
+        break;
+
+      default:
+        Serial.println("In default LED state.");
+        break;
+    }
+
+
+/* ------------------------------------- State Machine (button) ---------------------------------- */   
+    switch(buttonstate){
           //wait for the press
           case wait_press:
             break;
           //wait 20 ms for the signal to stabalize before accepting new state
           case debounce_press:
             delayMs(20);
-            state = wait_release;
+            buttonstate = wait_release;
             break;
           //wait for the button release
           case wait_release:
@@ -112,26 +159,30 @@ int main(){
           
           //state that sets the timer to 200 if the timer was at 100
           case debounce_release:
-            
+            alarmSilenced = true;            
+            buzzerOff();
             delayMs(20);
-            go = 1;
-            state = wait_press;
+            buttonstate = wait_press;
             break;
 
           //state that sets the timer to 100 if the timer was at 200
         }
-        //delay between the lights counting up
+        if (alarmTriggered && !alarmSilenced){
+          chirpUp();
+          chirpDown(); 
+          Serial.println("bruh") ;
+        }
        
       }
   return 0;
 }
 
 
-ISR(INT0_vect){
-    if(state == wait_press){
-        state = debounce_press;
+ISR(INT3_vect){
+    if(buttonstate == wait_press){
+        buttonstate = debounce_press;
     }
-    else if(state == wait_release){
-        state = debounce_release;
+    else if(buttonstate == wait_release){
+        buttonstate = debounce_release;
     }
 }

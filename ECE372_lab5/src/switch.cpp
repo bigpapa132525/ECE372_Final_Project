@@ -4,11 +4,11 @@
 
 #include<avr/io.h>
 void switch_init(){
-    DDRD &= ~(1 << DDD0);     // PD0 input
-    PORTD |= (1 << PORTD0);   // enable pull-up resistor
+    DDRD &= ~(1 << DDD3);     // PD3 input
+    PORTD |= (1 << PORTD3);   // enable pull-up resistor
 
-    EICRA |= (1 << ISC00);    // any logical change on INT0
-    EICRA &= ~(1 << ISC01);
+    EICRA |= (1 << ISC30);    // any logical change on INT0
+    EICRA &= ~(1 << ISC31);
 
-    EIMSK |= (1 << INT0);     // enable external interrupt INT0
+    EIMSK |= (1 << INT3);     // enable external interrupt INT0
 }

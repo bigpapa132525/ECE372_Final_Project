@@ -61,4 +61,30 @@ void sendDataSPI(unsigned char address, unsigned char data) {
     // Pull CS high to latch data
     PORTB |= (1 << PORTB4);
 }    
+void displaySmileyFace(){
+            // Happy face - eyes 00100100, mouth straight line with corner curves
+        sendDataSPI(1, 0x00);  // top
+        sendDataSPI(2, 0x24);  // eyes: 00100100
+        sendDataSPI(3, 0x24);  // eyes: 00100100
+        sendDataSPI(4, 0x24);
+        sendDataSPI(5, 0x00);  
+        sendDataSPI(6, 0x42);  // corners curve up
+        sendDataSPI(7, 0x3C);  
+        sendDataSPI(8, 0x00);  // bottom
+       
+        delayMs(100);
+}
+void displayFrownyFace(){
+        // Sad face
+        sendDataSPI(1, 0x00);  // top
+        sendDataSPI(2, 0x24);  // eyes
+        sendDataSPI(3, 0x24);  // eyes
+        sendDataSPI(4, 0x24);
+        sendDataSPI(5, 0x00);  
+        sendDataSPI(6, 0x3C);
+        sendDataSPI(7, 0x42);  
+        sendDataSPI(8, 0x00);  // bottom
+
+        delayMs(100);
+}
 

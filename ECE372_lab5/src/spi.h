@@ -9,4 +9,9 @@ void initSPI(void);
 /* Send 16-bit data to MAX7219 */
 void sendDataSPI(unsigned char address, unsigned char data);
 
+void displaySmileyFace();
+
+void displayFrownyFace();
+
+
 #endif
