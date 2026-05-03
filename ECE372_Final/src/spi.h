@@ -3,15 +3,26 @@
 
 #include <avr/io.h>
 
-/* SPI initialization for MAX7219 8x8 LED matrix */
+/* Pin mapping */
+#define SPI_PORT PORTB
+#define SPI_PIN  PINB
+#define SPI_DDR  DDRB
+
+#define SCK_PIN  DDB0
+#define MOSI_PIN DDB2
+#define MISO_PIN DDB3
+#define CS_PIN   DDB4
+
+/* TDC SPI command masks */
+#define READ_CMD  0b10111111
+#define WRITE_CMD 0b01000000
+
 void initSPI(void);
 
-/* Send 16-bit data to MAX7219 */
-void sendDataSPI(unsigned char address, unsigned char data);
+unsigned char transferSPI(unsigned char dataOut);
 
-void displaySmileyFace();
+unsigned int readRegister(unsigned char address, int datalength);
 
-void displayFrownyFace();
-
+void writeRegister(unsigned char address, unsigned char value);
 
 #endif

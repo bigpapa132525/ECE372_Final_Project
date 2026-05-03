@@ -1,90 +1,101 @@
-#include "SPI.h"
-#include "timer.h"
 #include <avr/io.h>
+#include "timer.h"
+#include "spi.h"
 
-/* --------------------------------------------------------------------
-   Bit-banging SPI for MAX7219 8x8 LED Matrix
-   Using PB0 = SCK, PB2 = MOSI, PB4 = CS
-   -------------------------------------------------------------------- */
+/* ---------------------------------------------------------
+   Bit-banged SPI for TDC
+   SPI Mode 1 style:
+   CPOL = 0, clock idles LOW
+   CPHA = 1, data sampled near falling edge
+
+   Example pin mapping:
+   PB0 = SCK
+   PB2 = MOSI
+   PB3 = MISO
+   PB4 = CS
+   --------------------------------------------------------- */
+
 
 void initSPI(void) {
-    // Set SCK (PB0), MOSI (PB2), and CS (PB4) as outputs
-    DDRB |= (1 << DDB0) | (1 << DDB2) | (1 << DDB4);
-    
-    // Initialize pins to idle state
-    PORTB &= ~(1 << PORTB0);  // SCK low
-    PORTB &= ~(1 << PORTB2); // MOSI low
-    PORTB |= (1 << PORTB4);  // CS high (idle)
+    // SCK, MOSI, CS outputs
+    SPI_DDR |= (1 << SCK_PIN) | (1 << MOSI_PIN) | (1 << CS_PIN);
+
+    // MISO input
+    SPI_DDR &= ~(1 << MISO_PIN);
+
+    // Idle states
+    SPI_PORT &= ~(1 << SCK_PIN);   // SCK low
+    SPI_PORT &= ~(1 << MOSI_PIN);  // MOSI low
+    SPI_PORT |=  (1 << CS_PIN);    // CS high
 }
 
-void sendDataSPI(unsigned char address, unsigned char data) {
-    // Pull CS low
-    PORTB &= ~(1 << PORTB4);
-    delayUs(1);
-    
-    // Send address byte (8 bits), MSB first
+unsigned char transferSPI(unsigned char dataOut) {
+    unsigned char dataIn = 0;
+
     for (int i = 7; i >= 0; i--) {
-        // Set MOSI based on bit
-        if (address & (1 << i)) {
-            PORTB |= (1 << PORTB2);
+        // Set MOSI bit
+        if (dataOut & (1 << i)) {
+            SPI_PORT |= (1 << MOSI_PIN);
         } else {
-            PORTB &= ~(1 << PORTB2);
+            SPI_PORT &= ~(1 << MOSI_PIN);
         }
+
         delayUs(1);
-        
-        // Clock pulse (low to high to low)
-        PORTB |= (1 << PORTB0);
+
+        // Rising edge
+        SPI_PORT |= (1 << SCK_PIN);
         delayUs(1);
-        PORTB &= ~(1 << PORTB0);
+
+        // Read MISO while clock is high
+        dataIn <<= 1;
+        if (SPI_PIN & (1 << MISO_PIN)) {
+            dataIn |= 1;
+        }
+
+        // Falling edge
+        SPI_PORT &= ~(1 << SCK_PIN);
         delayUs(1);
     }
-    
-    // Send data byte (8 bits), MSB first
-    for (int i = 7; i >= 0; i--) {
-        // Set MOSI based on bit
-        if (data & (1 << i)) {
-            PORTB |= (1 << PORTB2);
-        } else {
-            PORTB &= ~(1 << PORTB2);
-        }
-        delayUs(1);
-        
-        // Clock pulse
-        PORTB |= (1 << PORTB0);
-        delayUs(1);
-        PORTB &= ~(1 << PORTB0);
-        delayUs(1);
-    }
-    
+
+    return dataIn;
+}
+
+unsigned int readRegister(unsigned char address, int datalength) {
+    unsigned char data = 0;
+    unsigned int fulldata = 0;
+
+    address = address & READ_CMD;
+
+    SPI_PORT &= ~(1 << CS_PIN);
     delayUs(1);
-    
-    // Pull CS high to latch data
-    PORTB |= (1 << PORTB4);
-}    
-void displaySmileyFace(){
-            // Happy face - eyes 00100100, mouth straight line with corner curves
-        sendDataSPI(1, 0x00);  // top
-        sendDataSPI(2, 0x24);  // eyes: 00100100
-        sendDataSPI(3, 0x24);  // eyes: 00100100
-        sendDataSPI(4, 0x24);
-        sendDataSPI(5, 0x00);  
-        sendDataSPI(6, 0x42);  // corners curve up
-        sendDataSPI(7, 0x3C);  
-        sendDataSPI(8, 0x00);  // bottom
-       
-        delayMs(100);
-}
-void displayFrownyFace(){
-        // Sad face
-        sendDataSPI(1, 0x00);  // top
-        sendDataSPI(2, 0x24);  // eyes
-        sendDataSPI(3, 0x24);  // eyes
-        sendDataSPI(4, 0x24);
-        sendDataSPI(5, 0x00);  
-        sendDataSPI(6, 0x3C);
-        sendDataSPI(7, 0x42);  
-        sendDataSPI(8, 0x00);  // bottom
 
-        delayMs(100);
+    transferSPI(address);
+
+    fulldata = transferSPI(0x00);
+    datalength--;
+
+    while (datalength > 0) {
+        fulldata <<= 8;
+        data = transferSPI(0x00);
+        fulldata |= data;
+        datalength--;
+    }
+
+    delayUs(1);
+    SPI_PORT |= (1 << CS_PIN);
+
+    return fulldata;
 }
 
+void writeRegister(unsigned char address, unsigned char value) {
+    address = address | WRITE_CMD;
+
+    SPI_PORT &= ~(1 << CS_PIN);
+    delayUs(1);
+
+    transferSPI(address);
+    transferSPI(value);
+
+    delayUs(1);
+    SPI_PORT |= (1 << CS_PIN);
+}
