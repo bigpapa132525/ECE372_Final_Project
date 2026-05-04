@@ -15,6 +15,11 @@
    PB4 = CS
    --------------------------------------------------------- */
 
+#define SCK_PIN   PB1
+#define MOSI_PIN  PB2
+#define MISO_PIN  PB3
+#define CS_PIN    PB0
+
 
 void initSPI(void) {
     // SCK, MOSI, CS outputs
@@ -60,9 +65,9 @@ unsigned char transferSPI(unsigned char dataOut) {
     return dataIn;
 }
 
-unsigned int readRegister(unsigned char address, int datalength) {
+uint32_t  readRegister(unsigned char address, int datalength) {
     unsigned char data = 0;
-    unsigned int fulldata = 0;
+    uint32_t fulldata = 0;
 
     address = address & READ_CMD;
 
@@ -91,11 +96,11 @@ void writeRegister(unsigned char address, unsigned char value) {
     address = address | WRITE_CMD;
 
     SPI_PORT &= ~(1 << CS_PIN);
-    delayUs(1);
+    delayUs(5);
 
     transferSPI(address);
     transferSPI(value);
 
-    delayUs(1);
+    delayUs(5);
     SPI_PORT |= (1 << CS_PIN);
 }

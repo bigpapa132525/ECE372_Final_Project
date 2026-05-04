@@ -21,7 +21,7 @@ void initSPI(void);
 
 unsigned char transferSPI(unsigned char dataOut);
 
-unsigned int readRegister(unsigned char address, int datalength);
+uint32_t  readRegister(unsigned char address, int datalength);
 
 void writeRegister(unsigned char address, unsigned char value);
 

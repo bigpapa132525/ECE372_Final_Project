@@ -16,6 +16,7 @@
 
 #include <avr/io.h>
 #include "switch.h"
+#include "lcd.h"
 #include "timer.h"
 #include "pwm.h"
 #include "spi.h"
@@ -24,10 +25,9 @@
 #include "Arduino.h"
 
 
-#define TRIG_PIN PD7
-#define INT_PIN  PD6
-#define STR_PIN  PD5
-#define EN_PIN   PD4
+#define TRIG_PIN PH4
+#define INT_PIN  PH3
+#define EN_PIN   PH5
 
 #define CLK_PERIOD     125e-9
 #define CALIB_PERIODS  10
@@ -46,22 +46,22 @@ typedef enum {
 
 void initTDCGPIO(void)
 {
-    DDRD &= ~(1 << TRIG_PIN);
-    DDRD &= ~(1 << INT_PIN);
+    DDRH &= ~(1 << TRIG_PIN);
+    DDRH &= ~(1 << INT_PIN);
 
-    DDRD |= (1 << STR_PIN);
-    DDRD |= (1 << EN_PIN);
+    PORTH |= (1 << TRIG_PIN);
+    PORTH |= (1 << INT_PIN);
 
-    PORTD &= ~(1 << STR_PIN);
-
-    PORTD &= ~(1 << EN_PIN);
+    DDRH |= (1 << EN_PIN);
+// TDC sequence make enable low then high for board init
+    PORTH &= ~(1 << EN_PIN);
     delayMs(2);
-    PORTD |= (1 << EN_PIN);
+    PORTH |= (1 << EN_PIN);
 }
 
 void initTDCRegisters(void)
 {
-    writeRegister(0x00, 0x8A);
+    writeRegister(0x00, 0x8A);Serial.println(readRegister(0x00,1), HEX);
     writeRegister(0x01, 0x41);
     writeRegister(0x03, 0x07);
     writeRegister(0x04, 0xFF);
@@ -72,15 +72,31 @@ void initTDCRegisters(void)
     writeRegister(0x09, 0x00);
 }
 
-void sendOnePulse(void)
-{
-    PORTD |= (1 << STR_PIN);
-    delayUs(1);
-    PORTD &= ~(1 << STR_PIN);
-}
+// void sendOnePulse(void)
+// {
+//     PORTH |= (1 << STR_PIN);
+//     delayUs(1);
+//     PORTH &= ~(1 << STR_PIN);
+// }
 
 int main(void)
 {
+    // ------------------ initiallizing ----------------- //
+  initTimer1();
+  initTimer0();
+  initLCD();
+  switch_init();
+  sei(); // Enable global interrupts.
+
+//monitor stuff
+  Serial.begin(9600);  
+
+    moveCursor(0, 0); // moves the cursor to 0,0 position
+  writeString("Initializing");
+  moveCursor(1, 0);  // moves the cursor to 1,0 position
+  writeString("Please wait");
+
+
     TDC_State state = TDC_INIT;
 
     unsigned int TIME1 = 0;
@@ -95,11 +111,13 @@ int main(void)
     int CNT_OVF = 0;
     int MEAS_COM = 0;
 
-    double TOF1 = 0;
+    float TOF1 = 0;
     double CAL_COUNT = 0;
-    double NORM_LSB = 0;
+    float NORM_LSB = 0;
 
     int pulseCount = 0;
+
+    int elapsed = 0;
 
     while (1)
     {
@@ -110,6 +128,8 @@ int main(void)
                 initTDCGPIO();
                 delayMs(500);
                 initTDCRegisters();
+                moveCursor(0,0);
+                writeString("Finished Init");
 
                 state = TDC_START_MEASUREMENT;
                 break;
@@ -133,41 +153,48 @@ int main(void)
 
                 pulseCount = 0;
 
+
+
                 writeRegister(0x00, 0x83);
                 writeRegister(0x01, 0x44);
+                Serial.println("wait for triger");
 
                 state = TDC_WAIT_TRIG_HIGH;
                 break;
 
             case TDC_WAIT_TRIG_HIGH:
-                if (PIND & (1 << TRIG_PIN)) {
-                    state = TDC_SEND_PULSES;
+                if (PINH & (1 << TRIG_PIN)) {
+                    state = TDC_WAIT_INT_LOW;
                 } else {
                     /*
                     WAITING FOR TRIG HIGH
                     ADD TIMEOUT HERE IF NEEDED
                     THIS REPLACES SERIAL DEBUG PRINTS
                     */
+                   delayMs(1);
+                   elapsed+=1;
+                   if(elapsed > 50 )
+                   state = TDC_CLEAR_FLAGS; 
                 }
                 break;
 
-            case TDC_SEND_PULSES:
-                if (pulseCount < 6) {
-                    sendOnePulse();
-                    pulseCount++;
+            // case TDC_SEND_PULSES:
+            //     if (pulseCount < 6) {
+            //         sendOnePulse();
+            //         pulseCount++;
 
-                    if (pulseCount == 1 || pulseCount == 4) {
-                        delayMs(2);
-                    } else {
-                        delayMs(1);
-                    }
-                } else {
-                    state = TDC_WAIT_INT_LOW;
-                }
-                break;
+            //         if (pulseCount == 1 || pulseCount == 4) {
+            //             delayMs(2);
+            //         } else {
+            //             delayMs(1);
+            //         }
+            //     } else {
+            //         state = TDC_WAIT_INT_LOW;
+            //     }
+            //     break;
 
             case TDC_WAIT_INT_LOW:
-                if (!(PIND & (1 << INT_PIN))) {
+                if (!(PINH & (1 << INT_PIN))) {
                     state = TDC_READ_RESULTS;
                 } else {
                     /*
@@ -175,6 +202,7 @@ int main(void)
                     MEASUREMENT NOT COMPLETE YET
                     THIS REPLACES SERIAL DEBUG PRINTS
                     */
+                   Serial.println("waiting int pin");
                 }
                 break;
 
@@ -202,14 +230,21 @@ int main(void)
                     CAL_COUNT = (double)(CALIB2 - CALIB1) / (CALIB_PERIODS - 1);
                     NORM_LSB = CLK_PERIOD / CAL_COUNT;
 
-                    TOF1 = (NORM_LSB * (TIME1 - TIME2)) +
-                           (CLOCK1 * CLK_PERIOD);
+                    TOF1 = (NORM_LSB * (TIME1 - TIME2)) + (CLOCK1 * CLK_PERIOD);
 
-                    /*
-                    PRINT TOF1 VALUE HERE
-                    USE UART OR LCD OUTPUT
-                    THIS REPLACES SERIAL.PRINT
-                    */
+                    /* ---------------------- LCD Output -------------------*/
+                    const char output = TOF1;
+                    moveCursor(0,0);
+                    writeString("LCD OUTPUT");
+                    moveCursor(1,0);
+                    writeString("output");
+                    // ------------------- test output --------------- //
+                    Serial.println(TOF1*10000);
+                    // Serial.println(NORM_LSB) ;
+                    // Serial.println(CAL_COUNT);
+                    // Serial.print("TIME1 = "); Serial.println(TIME1);
+                    // Serial.print("TIME2 = "); Serial.println(TIME2);
+                    // Serial.print("CLOCK1 = "); Serial.println(CLOCK1);
 
                     (void)TOF1;
                 }
