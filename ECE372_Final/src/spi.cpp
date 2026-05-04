@@ -4,7 +4,7 @@
 
 /* ---------------------------------------------------------
    Bit-banged SPI for TDC
-   SPI Mode 1 style:
+   SPI Mode 0 style:
    CPOL = 0, clock idles LOW
    CPHA = 1, data sampled near falling edge
 

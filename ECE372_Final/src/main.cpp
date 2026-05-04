@@ -1,6 +1,6 @@
-// Author:
-// Net ID:
-// Date:
+// Author:Dylan, John, Josh
+// Net ID: dylancorrea13
+// Date: 5/4/2026
 // Assignment:     Final Project
 //
 // Description: This file contains a programmatic overall description of the
@@ -10,15 +10,9 @@
 // Requirements:
 //----------------------------------------------------------------------//
 
-// ni hao sluts
-
-
-
 #include <avr/io.h>
-#include "switch.h"
 #include "lcd.h"
 #include "timer.h"
-#include "pwm.h"
 #include "spi.h"
 #include "math.h"
 #include <avr/interrupt.h>
@@ -61,23 +55,30 @@ void initTDCGPIO(void)
 
 void initTDCRegisters(void)
 {
-    writeRegister(0x00, 0x8A);Serial.println(readRegister(0x00,1), HEX);
-    writeRegister(0x01, 0x41);
-    writeRegister(0x03, 0x07);
-    writeRegister(0x04, 0xFF);
-    writeRegister(0x05, 0xFF);
-    writeRegister(0x06, 0xFF);
-    writeRegister(0x07, 0xFF);
-    writeRegister(0x08, 0x00);
-    writeRegister(0x09, 0x00);
+//setup CONFIG1 register
+    writeRegister(0x00, 0x8A);
+        //test registers
+        // Serial.println(readRegister(0x00,1), HEX);
+   //setup CONFIG2 register
+   writeRegister(0x01, 0x41); // sets caibration periods and number of stops
+   //setup Interrupt status register
+   //writeRegister(0x02, 0x00);
+   //setup Interrupt MASK register
+   writeRegister(0x03, 0x07);
+   //setup coarse counter overflow_H register
+   writeRegister(0x04, 0xFF);
+   //setup coarse counter overflow_L register
+   writeRegister(0x05, 0xFF);
+   //setup clock counter overflow_H register
+   writeRegister(0x06, 0xFF);
+   //setup clock counter overflow_L register
+   writeRegister(0x07, 0xFF);
+   //setup clock counter stop mask_H register
+   writeRegister(0x08, 0x00);
+   //setup clock counter stop mask_L register
+   writeRegister(0x09, 0x00);
 }
 
-// void sendOnePulse(void)
-// {
-//     PORTH |= (1 << STR_PIN);
-//     delayUs(1);
-//     PORTH &= ~(1 << STR_PIN);
-// }
 
 int main(void)
 {
@@ -85,13 +86,12 @@ int main(void)
   initTimer1();
   initTimer0();
   initLCD();
-  switch_init();
   sei(); // Enable global interrupts.
 
 //monitor stuff
   Serial.begin(9600);  
 
-    moveCursor(0, 0); // moves the cursor to 0,0 position
+  moveCursor(0, 0); // moves the cursor to 0,0 position
   writeString("Initializing");
   moveCursor(1, 0);  // moves the cursor to 1,0 position
   writeString("Please wait");
@@ -102,7 +102,6 @@ int main(void)
     unsigned int TIME1 = 0;
     unsigned int TIME2 = 0;
     unsigned int CLOCK1 = 0;
-    unsigned int CLOCK2 = 0;
     unsigned int CALIB1 = 0;
     unsigned int CALIB2 = 0;
 
@@ -114,8 +113,6 @@ int main(void)
     float TOF1 = 0;
     double CAL_COUNT = 0;
     float NORM_LSB = 0;
-
-    int pulseCount = 0;
 
     int elapsed = 0;
 
@@ -138,7 +135,6 @@ int main(void)
                 TIME1 = 0;
                 TIME2 = 0;
                 CLOCK1 = 0;
-                CLOCK2 = 0;
                 CALIB1 = 0;
                 CALIB2 = 0;
 
@@ -150,9 +146,6 @@ int main(void)
                 TOF1 = 0;
                 CAL_COUNT = 0;
                 NORM_LSB = 0;
-
-                pulseCount = 0;
-
 
 
                 writeRegister(0x00, 0x83);
@@ -166,11 +159,7 @@ int main(void)
                 if (PINH & (1 << TRIG_PIN)) {
                     state = TDC_WAIT_INT_LOW;
                 } else {
-                    /*
-                    WAITING FOR TRIG HIGH
-                    ADD TIMEOUT HERE IF NEEDED
-                    THIS REPLACES SERIAL DEBUG PRINTS
-                    */
+                // Some pulses are missed and the state machine gets stuck
                    delayMs(1);
                    elapsed+=1;
                    if(elapsed > 50 )
@@ -178,31 +167,13 @@ int main(void)
                 }
                 break;
 
-            // case TDC_SEND_PULSES:
-            //     if (pulseCount < 6) {
-            //         sendOnePulse();
-            //         pulseCount++;
-
-            //         if (pulseCount == 1 || pulseCount == 4) {
-            //             delayMs(2);
-            //         } else {
-            //             delayMs(1);
-            //         }
-            //     } else {
-            //         state = TDC_WAIT_INT_LOW;
-            //     }
-            //     break;
 
             case TDC_WAIT_INT_LOW:
                 if (!(PINH & (1 << INT_PIN))) {
                     state = TDC_READ_RESULTS;
                 } else {
-                    /*
-                    WAITING FOR INT LOW
-                    MEASUREMENT NOT COMPLETE YET
-                    THIS REPLACES SERIAL DEBUG PRINTS
-                    */
-                   Serial.println("waiting int pin");
+                //Testing
+                //    Serial.println("waiting int pin");
                 }
                 break;
 
@@ -211,7 +182,6 @@ int main(void)
                 CLOCK1 = readRegister(0x11, 3);
 
                 TIME2  = readRegister(0x12, 3);
-                CLOCK2 = readRegister(0x13, 3);
 
                 CALIB1 = readRegister(0x1B, 3);
                 CALIB2 = readRegister(0x1C, 3);
@@ -233,11 +203,14 @@ int main(void)
                     TOF1 = (NORM_LSB * (TIME1 - TIME2)) + (CLOCK1 * CLK_PERIOD);
 
                     /* ---------------------- LCD Output -------------------*/
-                    const char output = TOF1;
+                    char buffer[16];
+                    dtostrf(TOF1 * 1e3, 8, 3, buffer);  // convert to microseconds
+
                     moveCursor(0,0);
-                    writeString("LCD OUTPUT");
+                    writeString("TDC Output:         ");
                     moveCursor(1,0);
-                    writeString("output");
+                    writeString(buffer);
+                    writeString(" ms");
                     // ------------------- test output --------------- //
                     Serial.println(TOF1*10000);
                     // Serial.println(NORM_LSB) ;
@@ -258,7 +231,7 @@ int main(void)
                 break;
 
             case TDC_DELAY:
-                delayMs(500);
+                delayMs(100);
                 state = TDC_START_MEASUREMENT;
                 break;
 
